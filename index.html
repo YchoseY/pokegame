@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>皮卡丘三麗鷗戳戳樂 (真實破裂版)</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="data.js"></script>
+    <style>
+        /* --- 全局設定 --- */
+        body {
+            font-family: "Arial Rounded MT Bold", "Comic Sans MS", "微軟正黑體", sans-serif;
+            /* 背景換成比較可愛的粉嫩色調 */
+            background: #FFF0F5; 
+            background-image: radial-gradient(#FFB6C1 2px, transparent 2px);
+            background-size: 25px 25px;
+            margin: 0; padding: 0;
+            height: 100vh; width: 100vw;
+            overflow: hidden;
+            display: flex; flex-direction: column; align-items: center;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* --- 設定按鈕 --- */
+        .settings-trigger {
+            position: absolute; top: 10px; left: 10px;
+            font-size: 1.5rem; opacity: 0.4; cursor: pointer;
+            background: rgba(255,255,255,0.5); padding: 5px; border-radius: 50%;
+            border: 2px solid #FF69B4; z-index: 200; color: #FF69B4;
+        }
+        .settings-modal {
+            display: none; position: fixed; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: #FFF; padding: 20px; width: 85%; max-width: 400px;
+            border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            border: 5px solid #FF69B4; z-index: 201; text-align: center;
+        }
+        .settings-backdrop {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 200;
+        }
+        textarea { width: 100%; height: 100px; padding: 10px; border: 2px solid #FFB6C1; resize: none; border-radius: 10px; outline: none;}
+        .btn { padding: 10px 20px; border-radius: 25px; border: none; cursor: pointer; color: white; margin-top: 10px; width: 100%; font-size: 1rem; font-weight: bold; }
+        .btn-green { background: #26de81; box-shadow: 0 4px #20bf6b; }
+        .btn-red { background: #fc5c65; box-shadow: 0 4px #eb3b5a; }
+        .btn:active { transform: translateY(2px); box-shadow: none; }
+
+        /* --- 戳戳樂盒子主體 --- */
+        .game-container {
+            flex: 1;
+            display: flex; justify-content: center; align-items: center;
+            width: 100%; padding: 20px; box-sizing: border-box; overflow-y: auto;
+        }
+
+        .poke-box {
+            background: #FF69B4; /* 改成可愛的桃紅色盒子 */
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(255, 105, 180, 0.4), inset 0 -5px 20px rgba(0,0,0,0.1);
+            border: 3px solid #FF1493;
+            display: grid;
+            gap: 12px;
+            max-width: 95%; max-height: 80vh; overflow-y: auto;
+        }
+
+        /* --- 單個洞洞 --- */
+        .hole {
+            width: 75px; height: 75px;
+            position: relative;
+            cursor: pointer;
+            border-radius: 50%;
+            background: #4a235a; /* 洞裡深紫色 */
+            box-shadow: inset 3px 3px 8px rgba(0,0,0,0.6);
+            display: flex; justify-content: center; align-items: center;
+            overflow: visible; /* 讓破裂動畫可以超出格子 */
+        }
+
+        /* 覆蓋的棉紙 (圖片層) */
+        .paper-cover {
+            position: absolute; top: -4px; left: -4px;
+            width: 83px; height: 83px;
+            border-radius: 50%;
+            /* 圖片背景設定 */
+            background-color: #fff;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            
+            border: 3px solid #fff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            transition: transform 0.1s;
+            z-index: 2;
+            /* 讓圖片看起來有點紙張的紋理感 */
+            filter: contrast(1.05) brightness(1.02);
+        }
+        
+        /* 懸停效果 */
+        .hole:not(.poked):hover .paper-cover { transform: scale(1.08); }
+        .hole:not(.poked):active .paper-cover { transform: scale(0.95); filter: brightness(0.9); }
+
+        /* --- 戳破後的狀態 --- */
+        .hole.poked .paper-cover {
+            /* 這裡不直接 display:none，而是讓動畫播放完 */
+            pointer-events: none;
+        }
+        
+        /* === 新版：真實破裂動畫 === */
+        .burst-anim {
+            animation: violentBurst 0.35s forwards ease-out;
+        }
+
+        @keyframes violentBurst {
+            0% {
+                transform: scale(1) rotate(0deg);
+                opacity: 1;
+            }
+            15% {
+                /* 先稍微縮小集氣 */
+                transform: scale(0.9);
+            }
+            50% {
+                /* 瞬間劇烈放大並歪斜，模擬扯破 */
+                transform: scale(1.6) rotate(-15deg);
+                opacity: 0.8;
+            }
+            100% {
+                /* 持續放大並消失 */
+                transform: scale(2.2) rotate(10deg);
+                opacity: 0;
+            }
+        }
+
+        /* --- 彈跳出來的獎項 (Modal) --- */
+        .prize-modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); z-index: 300;
+            justify-content: center; align-items: center;
+            flex-direction: column;
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .prize-card {
+            background: #fff; padding: 40px; border-radius: 30px;
+            text-align: center; border: 6px solid #FF69B4;
+            box-shadow: 0 0 40px rgba(255, 105, 180, 0.5);
+            animation: popUp 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            max-width: 85%;
+        }
+        @keyframes popUp { from { transform: scale(0) rotate(-10deg); } to { transform: scale(1) rotate(0deg); } }
+
+        .prize-name { font-size: 3rem; font-weight: 900; color: #FF1493; margin-bottom: 25px; text-shadow: 2px 2px 0 #FFF0F5; }
+        .close-btn { background: linear-gradient(to bottom, #FF69B4, #FF1493); color: white; border: none; padding: 15px 40px; font-size: 1.3rem; border-radius: 40px; cursor: pointer; font-weight: bold; box-shadow: 0 5px #C2185B; }
+        .close-btn:active { transform: translateY(3px); box-shadow: 0 2px #C2185B; }
+
+        /* --- 底部庫存清單 --- */
+        .inventory-panel {
+            width: 90%; max-width: 600px;
+            background: rgba(255,255,255,0.9); border-radius: 20px 20px 0 0;
+            border: 3px solid #FFB6C1; border-bottom: none;
+            padding: 15px; max-height: 20vh; overflow-y: auto;
+            box-shadow: 0 -5px 15px rgba(255, 182, 193, 0.3); z-index: 50;
+        }
+        .inventory-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+        .inv-item {
+            background: #fff; border: 2px solid #FFB6C1; border-radius: 20px;
+            padding: 5px 12px; font-size: 0.9rem; color: #555; font-weight: bold;
+        }
+        .inv-item.empty { background: #f5f5f5; color: #bbb; border-color:#eee; text-decoration: line-through; }
+        .inv-badge { background: #FF69B4; color: white; border-radius: 50%; padding: 3px 8px; font-size: 0.8rem; margin-left: 6px; }
+
+        /* RWD 調整 */
+        @media (max-width: 600px) {
+            .hole { width: 65px; height: 65px; }
+            .paper-cover { width: 73px; height: 73px; }
+            .prize-name { font-size: 2.2rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <button class="settings-trigger" onclick="toggleSettings()">⚙️</button>
+
+    <div class="settings-backdrop" id="backdrop" onclick="toggleSettings()"></div>
+    <div class="settings-modal" id="settingsModal">
+        <h3>👆 戳戳樂設定</h3>
+        <p style="font-size:0.8rem; color:#FF69B4">輸入：獎項,數量 (總數決定洞數)</p>
+        <textarea id="prizeInput"></textarea>
+        <button class="btn btn-green" onclick="saveConfigOnly()">暫存設定</button>
+        <button class="btn btn-red" onclick="resetPool()">♻️ 重置 (產生新盒子)</button>
+    </div>
+
+    <div class="game-container">
+        <div id="pokeBox" class="poke-box"></div>
+    </div>
+
+    <div class="prize-modal" id="prizeModal" onclick="closeModal()">
+        <div class="prize-card" onclick="event.stopPropagation()">
+            <div style="font-size: 4rem; margin-bottom: 10px;">🎁</div>
+            <div id="modalPrizeName" class="prize-name">獎項名稱</div>
+            <button class="close-btn" onclick="closeModal()">好耶！</button>
+        </div>
+    </div>
+
+    <div class="inventory-panel">
+        <div style="text-align:center; font-weight:bold; color:#FF69B4; margin-bottom:8px;">🌸 剩餘獎項 🌸</div>
+        <div id="inventoryList" class="inventory-list"></div>
+    </div>
+
+    <audio id="s_pop" src="https://assets.mixkit.co/active_storage/sfx/2414/2414-preview.mp3"></audio>
+    <audio id="s_cheer" src="https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3"></audio>
+
+    <script>
+        var pokeBox = document.getElementById('pokeBox');
+        var inventoryList = document.getElementById('inventoryList');
+        var inputArea = document.getElementById('prizeInput');
+        var prizeModal = document.getElementById('prizeModal');
+        var modalPrizeName = document.getElementById('modalPrizeName');
+
+        var currentTickets = []; 
+        var totalHoles = 0;      
+        var pokedState = [];     
+
+        // =================================================================
+        // 【重要】請在這裡替換成您想要的皮卡丘或三麗鷗圖片連結
+        // =================================================================
+        var coverImages = [
+            // 這裡先放一些範例可愛圖，請用您的連結替換它們
+            'https://cdn-icons-png.flaticon.com/512/188/188987.png'
+        ];
+        // =================================================================
+
+        function initGame() {
+            var savedTickets = localStorage.getItem('poke_tickets_v3');
+            var savedConfig = localStorage.getItem('poke_config_v3');
+            var savedState = localStorage.getItem('poke_state_v3');
+
+            if(savedConfig) {
+                inputArea.value = savedConfig;
+            } else if (typeof myPrizeData !== 'undefined') {
+                inputArea.value = myPrizeData.trim();
+            } else {
+                inputArea.value = "大獎-皮卡丘玩偶,1\n二獎-三麗鷗貼紙,5\n三獎-可愛糖果,14";
+            }
+
+            if (savedTickets && savedState) {
+                currentTickets = JSON.parse(savedTickets);
+                pokedState = JSON.parse(savedState);
+                totalHoles = pokedState.length;
+                renderBox();
+            } else {
+                buildPoolFromInput();
+            }
+            updateInventoryUI();
+        }
+
+        function buildPoolFromInput() {
+            var rawText = inputArea.value.trim();
+            localStorage.setItem('poke_config_v3', rawText);
+            
+            var lines = rawText.split('\n').filter(l => l.trim() !== '');
+            currentTickets = [];
+            
+            lines.forEach(line => {
+                var parts = line.replace('，', ',').split(',');
+                var name = parts[0].trim();
+                var count = parseInt(parts[1]) || 1;
+                for(var i=0; i < count; i++) currentTickets.push(name);
+            });
+
+            totalHoles = currentTickets.length;
+            pokedState = new Array(totalHoles).fill(false);
+            
+            saveData();
+            renderBox();
+        }
+
+        function saveData() {
+            localStorage.setItem('poke_tickets_v3', JSON.stringify(currentTickets));
+            localStorage.setItem('poke_state_v3', JSON.stringify(pokedState));
+        }
+
+        function renderBox() {
+            pokeBox.innerHTML = '';
+            
+            var columns = 4;
+            if (totalHoles <= 6) columns = 2;
+            else if (totalHoles <= 12) columns = 3;
+            else if (totalHoles <= 20) columns = 4;
+            else columns = 5;
+            
+            if (window.innerWidth < 500) columns = Math.min(columns, 4);
+
+            pokeBox.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+
+            for(let i=0; i<totalHoles; i++) {
+                let hole = document.createElement('div');
+                hole.className = 'hole';
+                
+                if (pokedState[i]) {
+                    hole.classList.add('poked');
+                    // 已經戳過的，移除圖片元素
+                } else {
+                    let paper = document.createElement('div');
+                    paper.className = 'paper-cover';
+                    // 依序循環使用圖片
+                    paper.style.backgroundImage = `url('${coverImages[i % coverImages.length]}')`;
+                    paper.onclick = function() { pokeHole(i, paper); };
+                    hole.appendChild(paper);
+                }
+                pokeBox.appendChild(hole);
+            }
+        }
+
+        function pokeHole(index, paperElement) {
+            if (currentTickets.length === 0) {
+                alert("獎品都抽完囉！");
+                return;
+            }
+
+            var s_pop = document.getElementById('s_pop');
+            try { s_pop.currentTime = 0; s_pop.play(); } catch(e){}
+
+            // 播放新的暴力破裂動畫
+            paperElement.classList.add('burst-anim');
+            // 動畫結束後移除元素
+            setTimeout(() => { paperElement.remove(); }, 350);
+
+            pokedState[index] = true;
+            document.querySelectorAll('.hole')[index].classList.add('poked');
+
+            var ticketIndex = Math.floor(Math.random() * currentTickets.length);
+            var result = currentTickets[ticketIndex];
+            currentTickets.splice(ticketIndex, 1);
+
+            saveData();
+            updateInventoryUI();
+
+            setTimeout(() => {
+                showPrize(result);
+            }, 300);
+        }
+
+        function showPrize(name) {
+            var s_cheer = document.getElementById('s_cheer');
+            try { s_cheer.currentTime = 0; s_cheer.play(); } catch(e){}
+            
+            modalPrizeName.innerText = name;
+            prizeModal.style.display = 'flex';
+            confetti({ particleCount: 200, spread: 120, origin: { y: 0.6 }, colors: ['#FF69B4', '#FFD700', '#87CEEB'] });
+        }
+
+        function closeModal() {
+            prizeModal.style.display = 'none';
+        }
+
+        function updateInventoryUI() {
+            var counts = {};
+            var rawText = inputArea.value.trim();
+            var lines = rawText.split('\n').filter(l => l.trim() !== '');
+            var allNames = [];
+            lines.forEach(line => {
+                var parts = line.replace('，', ',').split(',');
+                var name = parts[0].trim();
+                if(!allNames.includes(name)) allNames.push(name);
+                counts[name] = 0;
+            });
+            currentTickets.forEach(item => { if(counts[item] !== undefined) counts[item]++; });
+
+            inventoryList.innerHTML = '';
+            allNames.forEach(name => {
+                var count = counts[name];
+                var div = document.createElement('div');
+                div.className = 'inv-item' + (count === 0 ? ' empty' : '');
+                div.innerHTML = `${name} <span class="inv-badge">${count}</span>`;
+                inventoryList.appendChild(div);
+            });
+        }
+
+        function toggleSettings() {
+            var m = document.getElementById('settingsModal');
+            var b = document.getElementById('backdrop');
+            var show = m.style.display === 'block';
+            m.style.display = show ? 'none' : 'block';
+            b.style.display = show ? 'none' : 'block';
+        }
+
+        function saveConfigOnly() {
+            localStorage.setItem('poke_config_v3', inputArea.value);
+            toggleSettings();
+            alert("設定已暫存，請按「重置」生效");
+        }
+
+        function resetPool() {
+            if(confirm("要換一個新盒子嗎？所有洞洞都會補滿喔！")) {
+                localStorage.removeItem('poke_tickets_v3');
+                localStorage.removeItem('poke_state_v3');
+                buildPoolFromInput();
+                updateInventoryUI();
+                toggleSettings();
+            }
+        }
+
+        initGame();
+    </script>
+</body>
+</html>
